@@ -1,0 +1,83 @@
+{
+  "name": "GymFlow - deliver queued messages every 5 min",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] } },
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.GYMFLOW_URL }}/api/automation/outbox?limit=50",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GYMFLOW_SECRET }}" }] }
+      },
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "Fetch queued messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": { "fieldToSplitOut": "messages", "options": {} },
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "One item per message",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [480, 0]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Loop over messages",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [720, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v21.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.to_phone, type: 'template', template: { name: $json.template, language: { code: 'en' }, components: [{ type: 'body', parameters: $json.params.map(p => ({ type: 'text', text: String(p) })) }] } }) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "Send WhatsApp template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GYMFLOW_URL }}/api/automation/outbox/ack",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GYMFLOW_SECRET }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $('Loop over messages').item.json.id, status: $json.statusCode >= 200 && $json.statusCode < 300 ? 'sent' : 'failed', error: $json.statusCode >= 200 && $json.statusCode < 300 ? undefined : JSON.stringify($json.body) }) }}"
+      },
+      "id": "b2000000-0000-4000-8000-000000000006",
+      "name": "Report result to GymFlow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 0]
+    }
+  ],
+  "connections": {
+    "Every 5 minutes": { "main": [[{ "node": "Fetch queued messages", "type": "main", "index": 0 }]] },
+    "Fetch queued messages": { "main": [[{ "node": "One item per message", "type": "main", "index": 0 }]] },
+    "One item per message": { "main": [[{ "node": "Loop over messages", "type": "main", "index": 0 }]] },
+    "Loop over messages": { "main": [[], [{ "node": "Send WhatsApp template", "type": "main", "index": 0 }]] },
+    "Send WhatsApp template": { "main": [[{ "node": "Report result to GymFlow", "type": "main", "index": 0 }]] },
+    "Report result to GymFlow": { "main": [[{ "node": "Loop over messages", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "Asia/Kolkata" }
+}

@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local n8n data (credentials live here)
+/.n8n
+!.env.example

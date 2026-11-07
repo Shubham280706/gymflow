@@ -1,0 +1,99 @@
+{
+  "name": "GymFlow - daily invoices and WhatsApp reminders",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "days", "triggerAtHour": 9 }] } },
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Every day 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GYMFLOW_URL }}/api/cron/daily",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GYMFLOW_SECRET }}" }] }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Create invoices and queue reminders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.GYMFLOW_URL }}/api/automation/outbox?limit=100",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GYMFLOW_SECRET }}" }] },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Fetch queued messages",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": { "fieldToSplitOut": "messages", "options": {} },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "One item per message",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [720, 0]
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Loop over messages",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [960, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v21.0/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ messaging_product: 'whatsapp', to: $json.to_phone, type: 'template', template: { name: $json.template, language: { code: 'en' }, components: [{ type: 'body', parameters: $json.params.map(p => ({ type: 'text', text: String(p) })) }] } }) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Send WhatsApp template",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 0],
+      "notes": "Credential: create an 'HTTP Header Auth' credential with Name = Authorization, Value = Bearer <WhatsApp Cloud API token>. Swap this node for Interakt / Gupshup / Twilio if you use one of those."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GYMFLOW_URL }}/api/automation/outbox/ack",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $env.GYMFLOW_SECRET }}" }] },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $('Loop over messages').item.json.id, status: $json.statusCode >= 200 && $json.statusCode < 300 ? 'sent' : 'failed', error: $json.statusCode >= 200 && $json.statusCode < 300 ? undefined : JSON.stringify($json.body) }) }}"
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Report result to GymFlow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 0]
+    }
+  ],
+  "connections": {
+    "Every day 9 AM": { "main": [[{ "node": "Create invoices and queue reminders", "type": "main", "index": 0 }]] },
+    "Create invoices and queue reminders": { "main": [[{ "node": "Fetch queued messages", "type": "main", "index": 0 }]] },
+    "Fetch queued messages": { "main": [[{ "node": "One item per message", "type": "main", "index": 0 }]] },
+    "One item per message": { "main": [[{ "node": "Loop over messages", "type": "main", "index": 0 }]] },
+    "Loop over messages": { "main": [[], [{ "node": "Send WhatsApp template", "type": "main", "index": 0 }]] },
+    "Send WhatsApp template": { "main": [[{ "node": "Report result to GymFlow", "type": "main", "index": 0 }]] },
+    "Report result to GymFlow": { "main": [[{ "node": "Loop over messages", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "timezone": "Asia/Kolkata" }
+}
