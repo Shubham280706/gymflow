@@ -4,6 +4,10 @@ export function todayIST(): string {
   return new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 }
 
+export function hourIST(): number {
+  return new Date(Date.now() + 5.5 * 3600_000).getUTCHours();
+}
+
 export function addDays(date: string, n: number): string {
   const d = new Date(date + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + n);
@@ -21,6 +25,23 @@ export function inr(paise: number): string {
     currency: "INR",
     maximumFractionDigits: paise % 100 === 0 ? 0 : 2,
   }).format(paise / 100);
+}
+
+/** ₹12.5k / ₹1.2L style, for chart labels */
+export function inrCompact(paise: number): string {
+  const r = paise / 100;
+  if (r >= 100000) return `₹${+(r / 100000).toFixed(1)}L`;
+  if (r >= 1000) return `₹${+(r / 1000).toFixed(1)}k`;
+  return `₹${Math.round(r)}`;
+}
+
+/** "2026-11" for an ISO timestamp, in IST */
+export function monthKeyIST(iso: string): string {
+  return new Date(Date.parse(iso) + 5.5 * 3600_000).toISOString().slice(0, 7);
+}
+
+export function fmtDateShort(date: string): string {
+  return new Date(date + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
 export function fmtDate(date: string): string {

@@ -1,72 +1,132 @@
+import Link from "next/link";
 import { requireGym } from "@/lib/auth";
-import { fmtDate, todayIST } from "@/lib/format";
-import FormShell from "@/components/FormShell";
-import { addClient, setClientStatus } from "../actions";
+import { inr, todayIST } from "@/lib/format";
+import { dueText, memberState, whatsappLink, type MemberState } from "@/lib/members";
+import AddMemberDialog from "@/components/AddMemberDialog";
+import Avatar from "@/components/Avatar";
+import CycleBar from "@/components/CycleBar";
+import StatusPill from "@/components/StatusPill";
+import { IconChat, IconSearch } from "@/components/Icons";
 
-const BADGE: Record<string, string> = {
-  active: "bg-emerald-50 text-emerald-700",
-  paused: "bg-amber-50 text-amber-700",
-  left: "bg-slate-100 text-slate-500",
-};
+export const metadata = { title: "Members" };
 
-export default async function ClientsPage() {
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "overdue", label: "Overdue" },
+  { key: "due-soon", label: "Due soon" },
+  { key: "active", label: "On track" },
+  { key: "inactive", label: "Paused or left" },
+] as const;
+
+const matches = (filter: string, s: MemberState) =>
+  filter === "all" ? true : filter === "inactive" ? s === "paused" || s === "left" : s === filter;
+
+export default async function MembersPage({ searchParams }: { searchParams: Promise<{ q?: string; filter?: string }> }) {
+  const { q = "", filter = "all" } = await searchParams;
   const { supabase } = await requireGym();
-  const [{ data: clients }, { data: plans }] = await Promise.all([
-    supabase.from("clients").select("id, name, phone, status, next_due_date, plans(name)").order("created_at", { ascending: false }),
-    supabase.from("plans").select("id, name").eq("active", true).order("created_at"),
-  ]);
-  return (
-    <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Clients</h1>
-      <FormShell action={addClient} submitLabel="Register client" className="card flex flex-wrap items-end gap-3">
-        <label className="min-w-0 flex-1 basis-40 text-sm font-medium text-slate-700">
-          Name
-          <input name="name" required className="input mt-1" />
-        </label>
-        <label className="min-w-0 flex-1 basis-40 text-sm font-medium text-slate-700">
-          WhatsApp number
-          <input name="phone" required inputMode="tel" className="input mt-1" placeholder="98765 43210" />
-        </label>
-        <label className="min-w-0 flex-1 basis-36 text-sm font-medium text-slate-700">
-          Plan
-          <select name="plan_id" required className="input mt-1" defaultValue="">
-            <option value="" disabled>Choose…</option>
-            {(plans ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </label>
-        <label className="min-w-0 flex-1 basis-36 text-sm font-medium text-slate-700">
-          Joining date
-          <input name="start_date" type="date" defaultValue={todayIST()} className="input mt-1" />
-        </label>
-      </FormShell>
+  const today = todayIST();
 
-      <ul className="card divide-y divide-slate-100 p-0">
-        {(clients ?? []).map((c) => {
-          const plan = Array.isArray(c.plans) ? c.plans[0] : c.plans;
+  const [{ data: clients }, { data: plans }] = await Promise.all([
+    supabase
+      .from("clients")
+      .select("id, name, phone, status, next_due_date, plans(name, duration_days)")
+      .order("next_due_date"),
+    supabase.from("plans").select("id, name, price_paise").eq("active", true).order("created_at"),
+  ]);
+
+  const all = (clients ?? []).map((c) => {
+    const plan = Array.isArray(c.plans) ? c.plans[0] : c.plans;
+    return { ...c, plan, ...memberState(c, today) };
+  });
+  const needle = q.trim().toLowerCase();
+  const digits = needle.replace(/\D/g, "");
+  const searched = needle
+    ? all.filter((c) => c.name.toLowerCase().includes(needle) || (digits && c.phone.includes(digits)))
+    : all;
+  const counts = Object.fromEntries(FILTERS.map((f) => [f.key, searched.filter((c) => matches(f.key, c.state)).length]));
+  const list = searched.filter((c) => matches(filter, c.state));
+
+  return (
+    <div className="space-y-5 md:space-y-6">
+      <div className="flex items-end justify-between gap-4">
+        <h1 className="h-display text-4xl font-bold md:text-5xl">Members</h1>
+        <AddMemberDialog
+          today={today}
+          plans={(plans ?? []).map((p) => ({ id: p.id, name: p.name, price: inr(p.price_paise) }))}
+        />
+      </div>
+
+      <form role="search" className="relative">
+        <IconSearch className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-3" />
+        <input type="hidden" name="filter" value={filter} />
+        <input
+          name="q"
+          defaultValue={q}
+          type="search"
+          aria-label="Search members by name or number"
+          placeholder="Search by name or number"
+          className="input pl-11"
+        />
+      </form>
+
+      <nav aria-label="Filter members" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+        {FILTERS.map((f) => {
+          const on = filter === f.key;
           return (
-            <li key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3">
-              <div className="min-w-0 flex-1 basis-40">
-                <div className="truncate font-medium">{c.name}</div>
-                <div className="text-xs text-slate-500">+{c.phone}</div>
-              </div>
-              <div className="text-sm">
-                <div>{plan?.name ?? "—"}</div>
-                <div className="whitespace-nowrap text-xs text-slate-500">Next due {fmtDate(c.next_due_date)}</div>
-              </div>
-              <div className="w-16 text-right">
-                <span className={`rounded-full px-2 py-0.5 text-xs ${BADGE[c.status]}`}>{c.status}</span>
-              </div>
-              <form action={setClientStatus} className="flex w-full justify-end gap-1.5 sm:w-auto">
-                <input type="hidden" name="id" value={c.id} />
-                {c.status !== "active" && <button name="status" value="active" className="btn-secondary btn-sm">Activate</button>}
-                {c.status === "active" && <button name="status" value="paused" className="btn-secondary btn-sm">Pause</button>}
-                {c.status !== "left" && <button name="status" value="left" className="btn-secondary btn-sm">Left</button>}
-              </form>
-            </li>
+            <Link
+              key={f.key}
+              href={`/clients?filter=${f.key}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
+              aria-current={on ? "true" : undefined}
+              className={`inline-flex min-h-9 shrink-0 items-center gap-2 rounded-full border px-3.5 text-sm font-semibold ${
+                on ? "border-ink bg-ink text-white" : "border-line bg-surface text-ink-2 hover:bg-line-2"
+              }`}
+            >
+              {f.label}
+              <span className={`num text-[13px] ${on ? "text-white/70" : "text-ink-3"}`}>{counts[f.key]}</span>
+            </Link>
           );
         })}
-        {!clients?.length && <li className="px-4 py-6 text-sm text-slate-500">No clients yet. Register your first one above.</li>}
-      </ul>
+      </nav>
+
+      {all.length === 0 ? (
+        <div className="panel px-6 py-14 text-center">
+          <p className="h-display text-3xl font-semibold">No members yet</p>
+          <p className="mx-auto mt-2 max-w-[40ch] text-ink-2">
+            Add your first member and GymFlow will bill them on their joining date and remind them when a fee is due.
+          </p>
+        </div>
+      ) : list.length === 0 ? (
+        <div className="panel px-6 py-12 text-center text-ink-2">No members match. Try a different search or filter.</div>
+      ) : (
+        <ul className="panel divide-y divide-line-2 overflow-hidden">
+          {list.map((c) => (
+            <li key={c.id} className="flex items-center gap-2 pr-3 hover:bg-paper/60">
+              <Link href={`/clients/${c.id}`} className="flex min-w-0 flex-1 items-center gap-3 py-3.5 pl-4 md:pl-5">
+                <Avatar name={c.name} size={44} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate font-semibold">{c.name}</p>
+                    <StatusPill kind={c.state} />
+                  </div>
+                  <CycleBar state={c.state} daysLeft={c.daysLeft} totalDays={c.plan?.duration_days ?? 30} className="my-2 max-w-md" />
+                  <p className="truncate text-[13px] text-ink-3">
+                    {c.plan?.name ?? "No plan"} &middot; {c.state === "paused" || c.state === "left" ? "Not billed" : dueText(c.daysLeft)} &middot; +{c.phone}
+                  </p>
+                </div>
+              </Link>
+              <a
+                href={whatsappLink(c.phone)}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Message ${c.name} on WhatsApp`}
+                className="btn btn-quiet size-10 shrink-0 px-0"
+              >
+                <IconChat width={18} height={18} />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

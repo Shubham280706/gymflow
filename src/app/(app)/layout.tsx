@@ -1,34 +1,51 @@
-import Link from "next/link";
 import { requireGym } from "@/lib/auth";
+import { todayIST } from "@/lib/format";
+import Logo from "@/components/Logo";
+import Nav from "@/components/Nav";
+import { IconLogout } from "@/components/Icons";
 import { signOut } from "../login/actions";
 
-const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/clients", label: "Clients" },
-  { href: "/invoices", label: "Payments" },
-  { href: "/plans", label: "Plans" },
-];
-
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { gym } = await requireGym();
+  const { supabase, gym, user } = await requireGym();
+  const { count } = await supabase
+    .from("invoices")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending")
+    .lt("due_date", todayIST());
+  const overdue = count ?? 0;
+
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <span className="font-semibold text-slate-900">{gym.name}</span>
-          <nav className="flex flex-1 gap-1">
-            {NAV.map((n) => (
-              <Link key={n.href} href={n.href} className="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-          <form action={signOut}>
-            <button className="text-sm text-slate-500 hover:text-slate-800">Sign out</button>
-          </form>
+    <div className="min-h-dvh md:grid md:grid-cols-[15.5rem_1fr]">
+      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface px-3 py-5 md:flex">
+        <Logo className="px-2" />
+        <div className="mx-2 mt-6 rounded-xl bg-paper px-3 py-2.5">
+          <p className="truncate text-sm font-semibold">{gym.name}</p>
+          <p className="truncate text-xs text-ink-3">{user.email}</p>
         </div>
-      </header>
-      <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+        <nav className="mt-5 flex-1" aria-label="Main">
+          <Nav variant="side" overdue={overdue} />
+        </nav>
+        <form action={signOut}>
+          <button className="btn btn-ghost w-full justify-start px-3">
+            <IconLogout /> Sign out
+          </button>
+        </form>
+      </aside>
+
+      <div className="min-w-0">
+        <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-surface/90 px-4 backdrop-blur md:hidden">
+          <Logo />
+          <span className="max-w-[45%] truncate text-sm font-semibold text-ink-2">{gym.name}</span>
+        </header>
+        <main className="mx-auto w-full max-w-5xl px-4 pb-28 pt-6 md:px-8 md:pb-12 md:pt-10">{children}</main>
+      </div>
+
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
+        <Nav variant="tabs" overdue={overdue} />
+      </nav>
     </div>
   );
 }

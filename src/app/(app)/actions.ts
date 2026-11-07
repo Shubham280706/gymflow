@@ -50,13 +50,49 @@ export async function addClient(_: FormState, formData: FormData): Promise<FormS
   return { ok: true };
 }
 
+export async function updateMember(_: FormState, formData: FormData): Promise<FormState> {
+  const { supabase } = await requireGym();
+  const id = String(formData.get("id"));
+  const name = String(formData.get("name")).trim();
+  const phone = normalizePhone(String(formData.get("phone")));
+  const planId = String(formData.get("plan_id")) || null;
+  if (!name) return { error: "Enter the member's name." };
+  if (!phone) return { error: "Enter a valid 10-digit mobile number." };
+  const { error } = await supabase.from("clients").update({ name, phone, plan_id: planId }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath("/clients");
+  revalidatePath(`/clients/${id}`);
+  return { ok: true };
+}
+
+const REMINDER_CHOICES = [-3, -1, 0, 1, 3, 7];
+
+export async function updateGym(_: FormState, formData: FormData): Promise<FormState> {
+  const { supabase, gym } = await requireGym();
+  const name = String(formData.get("name")).trim();
+  if (!name) return { error: "Enter your gym's name." };
+  const phoneRaw = String(formData.get("phone") ?? "").trim();
+  const days = formData
+    .getAll("reminder_days")
+    .map(Number)
+    .filter((n) => REMINDER_CHOICES.includes(n))
+    .sort((a, b) => a - b);
+  const { error } = await supabase
+    .from("gyms")
+    .update({ name, phone: phoneRaw || null, reminder_days: days })
+    .eq("id", gym.id);
+  if (error) return { error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 export async function setClientStatus(formData: FormData) {
   const { supabase } = await requireGym();
   await supabase
     .from("clients")
     .update({ status: String(formData.get("status")) })
     .eq("id", String(formData.get("id")));
-  revalidatePath("/clients");
+  revalidatePath("/clients", "layout");
 }
 
 // The invoice is read through the owner's RLS-scoped client first, so one gym can never touch another's.
