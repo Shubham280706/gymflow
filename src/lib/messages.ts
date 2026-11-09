@@ -2,10 +2,12 @@ import { fmtDate, inr } from "./format";
 
 // WhatsApp business-initiated messages must use pre-approved templates.
 // Create these two templates in your WhatsApp provider with the parameter order below.
-//   gymflow_payment_reminder  ->  {{1}} name, {{2}} gym, {{3}} amount, {{4}} due date, {{5}} payment link
-//   gymflow_payment_receipt   ->  {{1}} name, {{2}} gym, {{3}} amount, {{4}} next due date
-export const TEMPLATE_REMINDER = "gymflow_payment_reminder";
-export const TEMPLATE_RECEIPT = "gymflow_payment_receipt";
+//   reminder  ->  {{1}} name, {{2}} gym, {{3}} amount, {{4}} due date, {{5}} payment link
+//   receipt   ->  {{1}} name, {{2}} gym, {{3}} amount, {{4}} next due date
+// Meta cannot rename a template after it is submitted, so the names are overridable
+// with WHATSAPP_TEMPLATE_REMINDER / WHATSAPP_TEMPLATE_RECEIPT if yours differ.
+export const TEMPLATE_REMINDER = process.env.WHATSAPP_TEMPLATE_REMINDER ?? "reminder";
+export const TEMPLATE_RECEIPT = process.env.WHATSAPP_TEMPLATE_RECEIPT ?? "receipt";
 
 export type Built = { template: string; params: string[]; body: string };
 

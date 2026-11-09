@@ -50,8 +50,10 @@ Create these two in Meta Business Manager (category: Utility), language `en`:
 
 | Name | Body |
 |---|---|
-| `gymflow_payment_reminder` | `Hi {{1}}, your membership fee of {{3}} at {{2}} is due on {{4}}. Pay here: {{5}}` |
-| `gymflow_payment_receipt` | `Hi {{1}}, we received your payment of {{3}} at {{2}}. Thank you! Next due: {{4}}.` |
+| `reminder` | `Hi {{1}}, this is a reminder from {{2}} about your membership fee of {{3}}, due on {{4}}. You can pay securely here: {{5}} Thank you!` |
+| `receipt` | `Hi {{1}}, {{2}} has received your payment of {{3}}. Thank you! Your next fee is due on {{4}}. See you at the gym!` |
+
+Meta rejects a template that starts or ends with a variable, so both end with plain text. Variables must be numbered in order of appearance.
 
 Using Interakt, Gupshup or Twilio instead? Replace the "Send WhatsApp template" node. The message payload (`to_phone`, `template`, `params`, `body`) stays the same.
 

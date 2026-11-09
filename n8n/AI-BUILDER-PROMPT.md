@@ -20,7 +20,7 @@ A. (daily trigger only) HTTP Request, POST {{app_url}}/api/cron/daily
 
 B. HTTP Request, GET {{app_url}}/api/automation/outbox?limit=50
    Header: Authorization = Bearer {{app_secret}}
-   Response shape: { "messages": [ { "id": "uuid", "to_phone": "919876543210", "template": "gymflow_payment_reminder", "params": ["Rahul","Iron Gym","₹1,500","7 Nov 2026","https://pay.link"], "body": "plain text", "kind": "r0" } ] }
+   Response shape: { "messages": [ { "id": "uuid", "to_phone": "919876543210", "template": "reminder", "params": ["Rahul","Iron Gym","₹1,500","7 Nov 2026","https://pay.link"], "body": "plain text", "kind": "r0" } ] }
    The array may be empty. In that case the workflow must stop cleanly without error.
 
 C. Split Out the "messages" array so there is one item per message. Then Loop Over Items with batch size 1.
